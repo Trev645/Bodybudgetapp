@@ -76,6 +76,22 @@ def utilisation_summary(df: pd.DataFrame, setting_type: str = "desk") -> dict:
     }
 
 
+def round_series(df: pd.DataFrame, setting_type: str = "desk") -> list[dict]:
+    """Chronological per-round occupancy series (for the sweep strip)."""
+    sub = df[df["setting_type"] == setting_type]
+    if sub.empty:
+        return []
+    rounds = _round_rates(sub)
+    ts = sub.groupby("round_id")["round_ts"].first()
+    rounds = rounds.assign(ts=rounds["round_id"].map(ts)).sort_values("ts")
+    return [
+        {"label": r.round_label, "ts": str(r.ts), "day": r.day_of_week,
+         "occupancy_pct": round(float(r.occupancy_pct), 1),
+         "in_use_pct": round(float(r.in_use_pct), 1)}
+        for r in rounds.itertuples()
+    ]
+
+
 def per_setting_rates(df: pd.DataFrame) -> pd.DataFrame:
     """Frequency vs occupancy per individual setting."""
     out = df.groupby(["setting_id", "setting_code"]).agg(

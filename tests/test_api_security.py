@@ -124,6 +124,27 @@ def test_benchmark_refuses_thin_peer_groups(client, admin_key, engine):
     assert "at least 3" in body["reason"]
 
 
+def test_console_served_and_studies_listed(client, admin_key):
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "AWA Utilisation Console" in page.text
+    t = register(client, admin_key, "Console Ltd")
+    h = {"X-API-Key": t["api_key"]}
+    building_id = client.post(
+        "/buildings", json={"name": "HQ", "region": "london"},
+        headers=h).json()["building_id"]
+    sid = client.post(f"/buildings/{building_id}/studies",
+                      json={"start_date": "2026-03-02",
+                            "end_date": "2026-03-06"},
+                      headers=h).json()["study_id"]
+    listed = client.get(f"/buildings/{building_id}/studies", headers=h).json()
+    assert [s["study_id"] for s in listed] == [sid]
+    # Other tenants get 404 on the same listing.
+    other = register(client, admin_key, "Other Ltd")
+    assert client.get(f"/buildings/{building_id}/studies",
+                      headers={"X-API-Key": other["api_key"]}).status_code == 404
+
+
 def test_benchmark_bad_dimensions_rejected(client, admin_key):
     me = register(client, admin_key, "Dims Ltd")
     h = {"X-API-Key": me["api_key"]}

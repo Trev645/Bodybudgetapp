@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine, text
 
@@ -43,6 +45,15 @@ app = FastAPI(
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": __version__}
+
+
+WEB_INDEX = Path(__file__).resolve().parents[1] / "web" / "index.html"
+
+
+@app.get("/", include_in_schema=False)
+def console() -> HTMLResponse:
+    """The client console: uploads, reports and peer comparison in one page."""
+    return HTMLResponse(WEB_INDEX.read_text())
 
 
 # --------------------------------------------------------------- admin
@@ -128,6 +139,19 @@ app.post("/buildings/{building_id}/space-schedule")(
     _upload_route(ingestion.ingest_space_schedule))
 
 
+@app.get("/buildings/{building_id}/studies")
+def list_studies(building_id: str,
+                 principal: Principal = Depends(deps.require_client),
+                 eng: Engine = Depends(deps.engine)) -> list[dict]:
+    deps.owned_building(eng, principal, building_id)
+    with eng.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT study_id, start_date, end_date, interval_mins, status "
+            "FROM study WHERE building_id = :b ORDER BY start_date DESC"),
+            {"b": building_id}).mappings().all()
+    return [dict(r) for r in rows]
+
+
 # --------------------------------------------------------------- studies
 
 class NewStudy(BaseModel):
@@ -185,6 +209,7 @@ def full_report(study_id: str,
         raise HTTPException(409, "no observations ingested for this study yet")
     return {
         "desks": metrics.utilisation_summary(obs, "desk"),
+        "desk_rounds": metrics.round_series(obs, "desk"),
         "meeting_rooms": metrics.meeting_room_module(obs),
         "desk_not_found_risk": sizing.desk_not_found_risk(eng, study_id),
         "desk_sizing": sizing.desks_required(eng, study_id, failure_rate),
