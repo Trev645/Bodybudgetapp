@@ -1,0 +1,135 @@
+"""Tenant isolation and anonymisation guarantees, tested through the API."""
+
+import io
+
+import pytest
+from fastapi.testclient import TestClient
+
+from awa.api.main import app
+from awa.security import issue_key
+
+
+@pytest.fixture()
+def client(engine):
+    with TestClient(app) as tc:
+        yield tc
+
+
+@pytest.fixture()
+def admin_key(engine):
+    return issue_key(engine, client_id=None, role="admin", label="test admin")
+
+
+def register(client, admin_key, name, sector="finance", region="london"):
+    r = client.post("/admin/clients",
+                    json={"name": name, "sector": sector, "region": region},
+                    headers={"X-API-Key": admin_key})
+    assert r.status_code == 201
+    return r.json()
+
+
+def csv_upload(text):
+    return {"file": ("data.csv", io.BytesIO(text.encode()), "text/csv")}
+
+
+def test_requests_without_key_are_rejected(client):
+    assert client.get("/buildings").status_code == 401
+    assert client.post("/buildings", json={"name": "x", "region": "y"}
+                       ).status_code == 401
+
+
+def test_client_keys_cannot_use_admin_endpoints(client, admin_key):
+    tenant = register(client, admin_key, "A Corp")
+    r = client.post("/admin/clients",
+                    json={"name": "evil", "sector": "x", "region": "y"},
+                    headers={"X-API-Key": tenant["api_key"]})
+    assert r.status_code == 403
+    r = client.get("/admin/research/capacity-experience",
+                   headers={"X-API-Key": tenant["api_key"]})
+    assert r.status_code == 403
+
+
+def test_cross_tenant_access_is_invisible(client, admin_key):
+    a = register(client, admin_key, "A Corp")
+    b = register(client, admin_key, "B Corp")
+    ha, hb = {"X-API-Key": a["api_key"]}, {"X-API-Key": b["api_key"]}
+
+    r = client.post("/buildings", json={"name": "A HQ", "region": "london",
+                                        "gross_area_m2": 12000}, headers=ha)
+    building_id = r.json()["building_id"]
+
+    # B sees an empty portfolio and gets 404 (not 403) probing A's building.
+    assert client.get("/buildings", headers=hb).json() == []
+    assert client.post(f"/buildings/{building_id}/studies",
+                       json={"start_date": "2026-03-02",
+                             "end_date": "2026-03-06"},
+                       headers=hb).status_code == 404
+    assert client.post(f"/buildings/{building_id}/settings",
+                       files=csv_upload("setting_code,type\nD1,desk"),
+                       headers=hb).status_code == 404
+    # A can use it normally.
+    assert client.post(f"/buildings/{building_id}/settings",
+                       files=csv_upload("setting_code,type\nD1,desk"),
+                       headers=ha).status_code == 200
+
+
+def test_upload_analyse_roundtrip(client, admin_key):
+    t = register(client, admin_key, "Roundtrip Ltd")
+    h = {"X-API-Key": t["api_key"]}
+    building_id = client.post(
+        "/buildings", json={"name": "HQ", "region": "london",
+                            "gross_area_m2": 9000},
+        headers=h).json()["building_id"]
+    client.post(f"/buildings/{building_id}/settings", headers=h, files=csv_upload(
+        "setting_code,type,floor,team\nD1,desk,1,Ops\nD2,desk,1,Ops"))
+    client.post(f"/buildings/{building_id}/headcount", headers=h, files=csv_upload(
+        "person_ref,team,employment_type\nP1,Ops,employee\nP2,Ops,employee\n"
+        "P3,Ops,contractor"))
+    study_id = client.post(
+        f"/buildings/{building_id}/studies",
+        json={"start_date": "2026-03-02", "end_date": "2026-03-03"},
+        headers=h).json()["study_id"]
+    r = client.post(f"/studies/{study_id}/observations", headers=h,
+                    files=csv_upload(
+        "setting_code,ts,round,status,team\n"
+        "D1,2026-03-02T10:00,R1,occupied,Ops\n"
+        "D2,2026-03-02T10:00,R1,empty,\n"
+        "D1,2026-03-02T14:00,R2,occupied,Ops\n"
+        "D2,2026-03-02T14:00,R2,occupied,Ops\n"))
+    assert r.json()["ok"], r.json()
+    report = client.get(f"/studies/{study_id}/report?failure_rate=5",
+                        headers=h).json()
+    assert report["desks"]["peak_occupancy_pct"] == 100.0
+    assert report["desks"]["average_utilisation_pct"] == 75.0
+    assert report["headcount_cascade"]["assigned_population"] == 3
+    assert report["desk_sizing"]["building"]["required_desks_pooled"] == 2
+
+
+def test_benchmark_refuses_thin_peer_groups(client, admin_key, engine):
+    from awa.synthetic import seed_demo
+    # Two other clients only — below the k-anonymity threshold of 3.
+    seed_demo(engine, n_clients=2, days=2, rounds_per_day=1)
+    me = register(client, admin_key, "Small Pool Ltd", sector="finance",
+                  region="london")
+    h = {"X-API-Key": me["api_key"]}
+    building_id = client.post(
+        "/buildings", json={"name": "HQ", "region": "london",
+                            "gross_area_m2": 9000},
+        headers=h).json()["building_id"]
+    r = client.get(f"/buildings/{building_id}/benchmark?dimensions=region",
+                   headers=h)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert "at least 3" in body["reason"]
+
+
+def test_benchmark_bad_dimensions_rejected(client, admin_key):
+    me = register(client, admin_key, "Dims Ltd")
+    h = {"X-API-Key": me["api_key"]}
+    building_id = client.post(
+        "/buildings", json={"name": "HQ", "region": "london"},
+        headers=h).json()["building_id"]
+    r = client.get(f"/buildings/{building_id}/benchmark?dimensions=client_name",
+                   headers=h)
+    assert r.status_code == 422
