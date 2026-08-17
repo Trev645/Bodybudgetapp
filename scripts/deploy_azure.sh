@@ -28,7 +28,7 @@ if ! az postgres flexible-server show -g "$RG" -n "$PG_NAME" -o none 2>/dev/null
     --public-access 0.0.0.0 --yes -o none
   echo "    admin password: $PG_PASSWORD  (store this securely NOW)"
 fi
-az postgres flexible-server db create -g "$RG" -s "$PG_NAME" -d "$DB_NAME" -o none
+az postgres flexible-server db create -g "$RG" -s "$PG_NAME" -n "$DB_NAME" -o none
 
 PG_HOST="$PG_NAME.postgres.database.azure.com"
 DB_URL="postgresql+psycopg://$PG_ADMIN:$PG_PASSWORD@$PG_HOST/$DB_NAME?sslmode=require"
@@ -37,7 +37,7 @@ echo "==> Container Apps environment + app (cloud build from Dockerfile)"
 az containerapp env create -g "$RG" -n "$ACA_ENV" -l "$LOCATION" -o none 2>/dev/null || true
 az containerapp up --name "$APP" --resource-group "$RG" \
   --environment "$ACA_ENV" --location "$LOCATION" \
-  --source . --ingress external --target-port 8000 -o none
+  --source . --ingress external --target-port 8000
 
 echo "==> Wiring database secret"
 az containerapp secret set -g "$RG" -n "$APP" \
