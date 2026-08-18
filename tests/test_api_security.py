@@ -145,6 +145,63 @@ def test_console_served_and_studies_listed(client, admin_key):
                       headers={"X-API-Key": other["api_key"]}).status_code == 404
 
 
+def test_admin_manages_organisations_and_upload_control(client, admin_key):
+    ha = {"X-API-Key": admin_key}
+    t = register(client, admin_key, "Managed Ltd")
+    h = {"X-API-Key": t["api_key"]}
+
+    assert client.get("/me", headers=ha).json()["role"] == "admin"
+    me = client.get("/me", headers=h).json()
+    assert me["role"] == "client" and me["uploads_enabled"] is True
+
+    orgs = client.get("/admin/clients", headers=ha).json()
+    org = next(o for o in orgs if o["client_id"] == t["client_id"])
+    assert org["uploads_enabled"] is True and org["active_keys"] == 1
+
+    building_id = client.post(
+        "/buildings", json={"name": "HQ", "region": "london"},
+        headers=h).json()["building_id"]
+
+    # Switch uploads off: data entry blocked with a clear message,
+    # viewing still allowed.
+    r = client.patch(f"/admin/clients/{t['client_id']}",
+                     json={"uploads_enabled": False}, headers=ha)
+    assert r.json()["uploads_enabled"] is False
+    blocked = client.post(f"/buildings/{building_id}/settings",
+                          files=csv_upload("setting_code,type\nD1,desk"),
+                          headers=h)
+    assert blocked.status_code == 403
+    assert "disabled" in blocked.json()["detail"]
+    assert client.get("/portfolio", headers=h).status_code == 200
+
+    # Switch back on: uploads work again.
+    client.patch(f"/admin/clients/{t['client_id']}",
+                 json={"uploads_enabled": True}, headers=ha)
+    assert client.post(f"/buildings/{building_id}/settings",
+                       files=csv_upload("setting_code,type\nD1,desk"),
+                       headers=h).status_code == 200
+
+    # Clients cannot use the management endpoints.
+    assert client.get("/admin/clients", headers=h).status_code == 403
+    assert client.patch(f"/admin/clients/{t['client_id']}",
+                        json={"uploads_enabled": False},
+                        headers=h).status_code == 403
+
+
+def test_admin_key_reissue_revokes_old_key(client, admin_key):
+    ha = {"X-API-Key": admin_key}
+    t = register(client, admin_key, "Rotate Ltd")
+    old = {"X-API-Key": t["api_key"]}
+    assert client.get("/buildings", headers=old).status_code == 200
+
+    r = client.post(f"/admin/clients/{t['client_id']}/reissue-key", headers=ha)
+    new_key = r.json()["api_key"]
+    assert new_key != t["api_key"]
+    assert client.get("/buildings", headers=old).status_code == 401
+    assert client.get("/buildings",
+                      headers={"X-API-Key": new_key}).status_code == 200
+
+
 def test_benchmark_bad_dimensions_rejected(client, admin_key):
     me = register(client, admin_key, "Dims Ltd")
     h = {"X-API-Key": me["api_key"]}

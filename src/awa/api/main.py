@@ -24,7 +24,8 @@ from awa.benchmarking.kpis import latest_study_id, study_kpis
 from awa.benchmarking.peers import benchmark_building
 from awa.benchmarking.research import capacity_experience_research
 from awa.db import run_migrations
-from awa.security import Principal, create_client, new_id, size_band_for_area
+from awa.security import (Principal, create_client, issue_key, new_id,
+                          size_band_for_area)
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
@@ -56,6 +57,21 @@ def console() -> HTMLResponse:
     return HTMLResponse(WEB_INDEX.read_text())
 
 
+@app.get("/me")
+def whoami(principal: Principal = Depends(deps.get_principal),
+           eng: Engine = Depends(deps.engine)) -> dict:
+    out: dict = {"role": principal.role}
+    if principal.client_id:
+        with eng.connect() as conn:
+            row = conn.execute(text(
+                "SELECT name, uploads_enabled FROM client WHERE client_id = :c"),
+                {"c": principal.client_id}).fetchone()
+        if row:
+            out["organisation"] = row.name
+            out["uploads_enabled"] = bool(row.uploads_enabled)
+    return out
+
+
 # --------------------------------------------------------------- admin
 
 class NewClient(BaseModel):
@@ -76,6 +92,64 @@ def register_client(body: NewClient,
             "note": "store this key now; only its hash is retained"}
 
 
+@app.get("/admin/clients")
+def list_clients(_: Principal = Depends(deps.require_admin),
+                 eng: Engine = Depends(deps.engine)) -> list[dict]:
+    with eng.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT c.client_id, c.name, c.sector, c.region, c.uploads_enabled,
+                   (SELECT COUNT(*) FROM building b
+                    WHERE b.client_id = c.client_id) AS buildings,
+                   (SELECT COUNT(*) FROM study s
+                    WHERE s.client_id = c.client_id
+                      AND s.status != 'open') AS studies,
+                   (SELECT COUNT(*) FROM api_key k
+                    WHERE k.client_id = c.client_id AND k.revoked = 0)
+                   AS active_keys
+            FROM client c ORDER BY c.created_at
+            """)).mappings().all()
+    return [dict(r) | {"uploads_enabled": bool(r["uploads_enabled"])}
+            for r in rows]
+
+
+class ClientUpdate(BaseModel):
+    uploads_enabled: bool
+
+
+@app.patch("/admin/clients/{client_id}")
+def update_client(client_id: str, body: ClientUpdate,
+                  _: Principal = Depends(deps.require_admin),
+                  eng: Engine = Depends(deps.engine)) -> dict:
+    with eng.begin() as conn:
+        result = conn.execute(text(
+            "UPDATE client SET uploads_enabled = :u WHERE client_id = :c"),
+            {"u": 1 if body.uploads_enabled else 0, "c": client_id})
+    if result.rowcount == 0:
+        raise HTTPException(404, "organisation not found")
+    return {"client_id": client_id, "uploads_enabled": body.uploads_enabled}
+
+
+@app.post("/admin/clients/{client_id}/reissue-key")
+def reissue_key(client_id: str,
+                _: Principal = Depends(deps.require_admin),
+                eng: Engine = Depends(deps.engine)) -> dict:
+    """Revoke every existing key for the organisation and issue a fresh one."""
+    with eng.connect() as conn:
+        client = conn.execute(text(
+            "SELECT name FROM client WHERE client_id = :c"),
+            {"c": client_id}).fetchone()
+    if client is None:
+        raise HTTPException(404, "organisation not found")
+    with eng.begin() as conn:
+        conn.execute(text(
+            "UPDATE api_key SET revoked = 1 WHERE client_id = :c"),
+            {"c": client_id})
+    raw_key = issue_key(eng, client_id=client_id, role="client",
+                        label=f"reissued key for {client.name}")
+    return {"client_id": client_id, "api_key": raw_key,
+            "note": "previous keys are revoked; share this one securely"}
+
+
 @app.get("/admin/research/capacity-experience")
 def research(_: Principal = Depends(deps.require_admin),
              eng: Engine = Depends(deps.engine)) -> dict:
@@ -94,6 +168,7 @@ class NewBuilding(BaseModel):
 def create_building(body: NewBuilding,
                     principal: Principal = Depends(deps.require_client),
                     eng: Engine = Depends(deps.engine)) -> dict:
+    deps.require_uploads_enabled(eng, principal)
     building_id = new_id("bld")
     with eng.begin() as conn:
         conn.execute(text(
@@ -123,6 +198,7 @@ def _upload_route(loader):
                     principal: Principal = Depends(deps.require_client),
                     eng: Engine = Depends(deps.engine)) -> dict:
         deps.owned_building(eng, principal, building_id)
+        deps.require_uploads_enabled(eng, principal)
         df = await deps.read_tabular_upload(file)
         report = loader(eng, principal.client_id, building_id, df)
         return report.to_dict()
@@ -165,6 +241,7 @@ def create_study(building_id: str, body: NewStudy,
                  principal: Principal = Depends(deps.require_client),
                  eng: Engine = Depends(deps.engine)) -> dict:
     deps.owned_building(eng, principal, building_id)
+    deps.require_uploads_enabled(eng, principal)
     if body.end_date < body.start_date:
         raise HTTPException(422, "end_date must not precede start_date")
     study_id = ingestion.create_study(
@@ -180,6 +257,7 @@ async def upload_observations(study_id: str, file: UploadFile,
                               principal: Principal = Depends(deps.require_client),
                               eng: Engine = Depends(deps.engine)) -> dict:
     deps.owned_study(eng, principal, study_id)
+    deps.require_uploads_enabled(eng, principal)
     df = await deps.read_tabular_upload(file)
     return ingestion.ingest_observations(
         eng, principal.client_id, study_id, df).to_dict()
@@ -190,6 +268,7 @@ async def upload_survey(study_id: str, file: UploadFile,
                         principal: Principal = Depends(deps.require_client),
                         eng: Engine = Depends(deps.engine)) -> dict:
     deps.owned_study(eng, principal, study_id)
+    deps.require_uploads_enabled(eng, principal)
     df = await deps.read_tabular_upload(file)
     return ingestion.ingest_survey(
         eng, principal.client_id, study_id, df).to_dict()

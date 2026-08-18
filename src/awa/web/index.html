@@ -147,7 +147,8 @@
 "use strict";
 const $ = (sel, el=document) => el.querySelector(sel);
 const app = $("#app");
-const S = { key: sessionStorage.getItem("awa_key") || "" };
+const S = { key: sessionStorage.getItem("awa_key") || "",
+            role: sessionStorage.getItem("awa_role") || "client" };
 const fmt = (v, d=1) => v == null ? "—" : Number(v).toFixed(d).replace(/\.0$/, "");
 const esc = s => String(s ?? "").replace(/[&<>"']/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -275,9 +276,12 @@ const hbar = (label, value, max, color, tipText, suffix="") => `
 
 /* ---------------- views ---------------- */
 function nav(active) {
-  $("#nav").innerHTML = S.key ? `
-    <a href="#/portfolio" class="${active==="portfolio"?"on":""}">Portfolio</a>
-    <a href="#/connect" class="${active==="connect"?"on":""}">API key</a>` : "";
+  const home = S.role === "admin"
+    ? `<a href="#/admin" class="${active==="admin"?"on":""}">Organisations</a>`
+    : `<a href="#/portfolio" class="${active==="portfolio"?"on":""}">Portfolio</a>`;
+  $("#nav").innerHTML = S.key
+    ? home + `<a href="#/connect" class="${active==="connect"?"on":""}">API key</a>`
+    : "";
 }
 
 function connectView() {
@@ -297,11 +301,118 @@ function connectView() {
     e.preventDefault();
     S.key = $("#key").value.trim();
     try {
-      await api("/buildings");
+      const me = await api("/me");
+      S.role = me.role;
       sessionStorage.setItem("awa_key", S.key);
-      location.hash = "#/portfolio";
+      sessionStorage.setItem("awa_role", S.role);
+      const dest = S.role === "admin" ? "#/admin" : "#/portfolio";
+      if (location.hash === dest) route(); else location.hash = dest;
     } catch (err) { $("#kerr").textContent = "That key was not accepted."; }
   };
+}
+
+async function adminView() {
+  nav("admin");
+  app.innerHTML = `
+    <p class="eyebrow">Administration</p>
+    <h2>Organisations</h2>
+    <p class="sub">Each organisation connects with its own key and sees only
+      its own data. Turning uploads off makes their access view-only.</p>
+    <div id="orgs" class="muted">Loading…</div>
+    <div id="newkey"></div>
+    <p class="eyebrow">Add an organisation</p>
+    <div class="card"><form class="row" id="of">
+      <input id="oname" placeholder="Organisation name" required>
+      <input id="osector" placeholder="Sector (e.g. finance)" required>
+      <input id="oregion" placeholder="Region (e.g. london)" required>
+      <button class="primary">Create organisation</button>
+      <span class="err" id="oerr"></span>
+    </form></div>
+    <p class="eyebrow">Research corpus</p>
+    <div id="research" class="card muted">Loading…</div>`;
+
+  const showKey = (title, r) => {
+    $("#newkey").innerHTML = `<div class="card" style="border-color:var(--s2)">
+      <h3>${esc(title)}</h3>
+      <p class="sub small">Copy this key now — it is shown only once. Send the
+        console address and the key to the organisation separately.</p>
+      <code style="word-break:break-all">${esc(r.api_key)}</code></div>`;
+  };
+
+  $("#of").onsubmit = async e => {
+    e.preventDefault();
+    try {
+      const r = await api("/admin/clients", {method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: $("#oname").value,
+          sector: $("#osector").value, region: $("#oregion").value})});
+      await loadOrgs();
+      showKey(`Key for ${$("#oname").value}`, r);
+      e.target.reset();
+    } catch (err) { $("#oerr").textContent = err.message; }
+  };
+
+  async function loadOrgs() {
+    const rows = await api("/admin/clients");
+    $("#orgs").innerHTML = rows.length ? `<div class="card"><table>
+      <thead><tr><th>Organisation</th><th>Sector</th><th>Region</th>
+        <th>Buildings</th><th>Studies</th><th>Uploads</th><th></th></tr></thead>
+      <tbody>` + rows.map(r => `<tr>
+        <td>${esc(r.name)}</td><td>${esc(r.sector)}</td><td>${esc(r.region)}</td>
+        <td>${r.buildings}</td><td>${r.studies}</td>
+        <td><label><input type="checkbox" data-org="${r.client_id}"
+          ${r.uploads_enabled ? "checked" : ""}>
+          ${r.uploads_enabled ? "enabled" : "view-only"}</label></td>
+        <td><button class="quiet" data-reissue="${r.client_id}"
+          data-name="${esc(r.name)}">New key</button></td></tr>`).join("") +
+      `</tbody></table></div>`
+      : `<div class="card">No organisations yet — create the first one below.</div>`;
+    document.querySelectorAll("#orgs input[data-org]").forEach(cb => {
+      cb.onchange = async () => {
+        await api(`/admin/clients/${cb.dataset.org}`, {method: "PATCH",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({uploads_enabled: cb.checked})});
+        loadOrgs();
+      };
+    });
+    document.querySelectorAll("#orgs button[data-reissue]").forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm(`Issue a new key for ${btn.dataset.name}? Their current `
+                     + `key stops working immediately.`)) return;
+        const r = await api(`/admin/clients/${btn.dataset.reissue}/reissue-key`,
+                            {method: "POST"});
+        showKey(`New key for ${btn.dataset.name}`, r);
+        loadOrgs();
+      };
+    });
+  }
+
+  try { await loadOrgs(); }
+  catch (err) { $("#orgs").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+
+  try {
+    const r = await api("/admin/research/capacity-experience");
+    const corr = r.correlations || {};
+    const fmtCorr = c => c ? `r = ${c.r} (n=${c.n})` : "not enough data";
+    $("#research").className = "card";
+    $("#research").innerHTML = r.studies
+      ? `<div class="tiles">
+          <div class="tile"><div class="v">${r.studies}</div>
+            <div class="l">Studies in the corpus</div></div>
+          <div class="tile"><div class="v">${
+              typeof r.universal_tipping_point === "object"
+              ? r.universal_tipping_point.tipping_point_x + "%" : "—"}</div>
+            <div class="l">Utilisation tipping point</div>
+            <div class="n">${typeof r.universal_tipping_point === "object"
+              && !r.universal_tipping_point.confident
+              ? "fitted, low confidence" : ""}</div></div>
+        </div>
+        <p class="small">Capacity ratio ↔ experience:
+          ${fmtCorr(corr.capacity_ratio_vs_experience)} ·
+          Utilisation ↔ experience:
+          ${fmtCorr(corr.utilisation_vs_experience)}</p>`
+      : `<p class="muted small">No completed studies in the corpus yet.</p>`;
+  } catch (err) { $("#research").textContent = err.message; }
 }
 
 async function portfolioView() {
@@ -633,12 +744,13 @@ async function studyView(id) {
 
 /* ---------------- router ---------------- */
 function route() {
-  const h = location.hash || "#/portfolio";
+  const fallback = S.role === "admin" ? "#/admin" : "#/portfolio";
+  const h = location.hash || fallback;
   if (!S.key && h !== "#/connect") { location.hash = "#/connect"; return; }
   const m = h.match(/^#\/(\w+)(?:\/(.+))?/) || [];
-  ({connect: connectView, portfolio: portfolioView,
+  ({connect: connectView, portfolio: portfolioView, admin: adminView,
     building: () => buildingView(m[2]), study: () => studyView(m[2])}[m[1]]
-    || portfolioView)();
+    || (S.role === "admin" ? adminView : portfolioView))();
 }
 addEventListener("hashchange", route);
 route();

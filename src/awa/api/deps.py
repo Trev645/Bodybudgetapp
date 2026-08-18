@@ -46,6 +46,18 @@ def require_admin(principal: Principal = Depends(get_principal)) -> Principal:
     return principal
 
 
+def require_uploads_enabled(eng: Engine, principal: Principal) -> None:
+    """Uploads can be switched off per organisation from the admin console."""
+    with eng.connect() as conn:
+        row = conn.execute(text(
+            "SELECT uploads_enabled FROM client WHERE client_id = :c"),
+            {"c": principal.client_id}).fetchone()
+    if row is None or not row.uploads_enabled:
+        raise HTTPException(
+            403, "uploads are currently disabled for your organisation — "
+                 "contact AWA to re-enable them")
+
+
 def owned_building(eng: Engine, principal: Principal, building_id: str) -> None:
     with eng.connect() as conn:
         row = conn.execute(text(
