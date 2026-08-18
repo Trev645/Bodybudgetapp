@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWA Utilisation Console</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+    --seq-250: #86b6ef; --seq-450: #2a78d6; --seq-650: #104281;
+    --good: #0ca30c; --good-text: #006300; --warning: #fab219;
+    --serious: #ec835a; --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+      --seq-250: #6da7ec; --seq-450: #3987e5; --seq-650: #184f95;
+      --good-text: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --seq-250: #6da7ec; --seq-450: #3987e5; --seq-650: #184f95;
+    --good-text: #0ca30c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 18px 28px 14px; border-bottom: 1px solid var(--grid);
+  }
+  header h1 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  header .tag { font-size: 11px; letter-spacing: 0.14em; color: var(--muted);
+    text-transform: uppercase; }
+  header nav { margin-left: auto; display: flex; gap: 4px; }
+  header nav a {
+    color: var(--ink-2); text-decoration: none; font-size: 13px;
+    padding: 5px 10px; border-radius: 6px;
+  }
+  header nav a.on { color: var(--ink); background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--ring); font-weight: 600; }
+  header nav a:hover { color: var(--ink); }
+  main { max-width: 1060px; margin: 0 auto; padding: 24px 28px 80px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin: 26px 0 6px; }
+  h2 { font-size: 21px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h3 { font-size: 15px; margin: 0 0 10px; }
+  .sub { color: var(--ink-2); font-size: 13.5px; margin: 0 0 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 10px; padding: 18px 20px; margin: 14px 0;
+  }
+  .cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .tiles { display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 14px 0; }
+  .tile { background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 10px; padding: 12px 14px; }
+  .tile .v { font-size: 27px; font-weight: 700; letter-spacing: -0.02em; }
+  .tile .l { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+  .tile .n { font-size: 11.5px; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th { text-align: left; font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+    padding: 6px 10px 6px 0; border-bottom: 1px solid var(--grid); }
+  td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  input, select, button {
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--axis); border-radius: 7px; padding: 7px 10px;
+  }
+  input[type=file] { padding: 5px; font-size: 13px; }
+  input:focus-visible, button:focus-visible, select:focus-visible, a:focus-visible {
+    outline: 2px solid var(--s1); outline-offset: 1px; }
+  button.primary { background: var(--ink); color: var(--page);
+    border-color: var(--ink); font-weight: 600; cursor: pointer; }
+  button.quiet { cursor: pointer; }
+  form.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  label.f { display: block; font-size: 12px; color: var(--ink-2); margin: 8px 0 3px; }
+  .issue { font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--grid); }
+  .issue:last-child { border-bottom: 0; }
+  .sev { display: inline-block; min-width: 60px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; }
+  .sev.error { color: var(--critical); } .sev.warning { color: var(--ink-2); }
+  .sev.info { color: var(--muted); }
+  .ok-note { color: var(--good-text); font-size: 13px; font-weight: 600; }
+  .chart { margin-top: 8px; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--ink-2);
+    margin: 6px 0 2px; flex-wrap: wrap; }
+  .legend .k { display: inline-block; width: 10px; height: 10px;
+    border-radius: 3px; margin-right: 5px; vertical-align: baseline; }
+  .hbar { display: grid; grid-template-columns: 170px 1fr 74px; gap: 10px;
+    align-items: center; padding: 5px 0; font-size: 13.5px; }
+  .hbar .track { background: none; height: 14px; position: relative; }
+  .hbar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 0 4px 4px 0; }
+  .hbar .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .strip { display: grid; grid-template-columns: 170px 1fr 88px; gap: 10px;
+    align-items: center; padding: 7px 0; font-size: 13.5px; }
+  .range { position: relative; height: 22px; }
+  .range .band { position: absolute; top: 8px; height: 6px;
+    background: var(--grid); border-radius: 3px; }
+  .range .med { position: absolute; top: 5px; width: 2px; height: 12px;
+    background: var(--ink-2); }
+  .range .you { position: absolute; top: 3px; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--s2); border: 2px solid var(--surface); }
+  #tip { position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--ink); color: var(--page); font-size: 12.5px;
+    padding: 5px 9px; border-radius: 6px; max-width: 260px; }
+  .dial { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .dial input[type=range] { width: 220px; accent-color: var(--s1); padding: 0; border: 0; }
+  .dial .v { font-size: 24px; font-weight: 700; min-width: 60px;
+    font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .err { color: var(--critical); font-size: 13.5px; }
+  a { color: var(--s1); }
+  @media (prefers-reduced-motion: no-preference) {
+    .sweep rect { transition: opacity .12s ease; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>AWA Utilisation Console</h1>
+  <span class="tag">Observe · Size · Compare</span>
+  <nav id="nav"></nav>
+</header>
+<main id="app"></main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+"use strict";
+const $ = (sel, el=document) => el.querySelector(sel);
+const app = $("#app");
+const S = { key: sessionStorage.getItem("awa_key") || "",
+            role: sessionStorage.getItem("awa_role") || "client" };
+const fmt = (v, d=1) => v == null ? "—" : Number(v).toFixed(d).replace(/\.0$/, "");
+const esc = s => String(s ?? "").replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function api(path, opts={}) {
+  const headers = Object.assign({"X-API-Key": S.key}, opts.headers || {});
+  const res = await fetch(path, Object.assign({}, opts, {headers}));
+  if (res.status === 401) { location.hash = "#/connect"; throw new Error("Not connected"); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || res.statusText);
+  return body;
+}
+const upload = (path, file) => {
+  const fd = new FormData(); fd.append("file", file);
+  return api(path, {method: "POST", body: fd});
+};
+
+/* ---------------- tooltip ---------------- */
+const tip = $("#tip");
+document.addEventListener("pointerover", e => {
+  const t = e.target.closest("[data-tip]");
+  if (!t) { tip.style.display = "none"; return; }
+  tip.textContent = t.dataset.tip; tip.style.display = "block";
+});
+document.addEventListener("pointermove", e => {
+  if (tip.style.display === "none") return;
+  const pad = 14, w = tip.offsetWidth;
+  tip.style.left = Math.min(e.clientX + pad, innerWidth - w - 8) + "px";
+  tip.style.top = (e.clientY + pad) + "px";
+});
+
+/* ---------------- charts ---------------- */
+function sweepStrip(rounds) {
+  // The signature mark: one thin bar per observation sweep, in walk order.
+  if (!rounds.length) return '<p class="muted small">No rounds yet.</p>';
+  const W = 960, H = 190, pad = {l: 38, r: 6, t: 10, b: 24};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  const bw = Math.max(2, Math.min(18, iw / rounds.length - 2));
+  const step = iw / rounds.length;
+  const y = v => pad.t + ih * (1 - v / 100);
+  let bars = "", dayTicks = "", lastDay = "";
+  rounds.forEach((r, i) => {
+    const x = pad.l + i * step + (step - bw) / 2;
+    bars += `<rect x="${x.toFixed(1)}" y="${y(r.in_use_pct).toFixed(1)}" width="${bw.toFixed(1)}"
+      height="${(ih * r.in_use_pct / 100).toFixed(1)}" rx="2" fill="var(--seq-250)"
+      data-tip="${esc(r.label)} — occupied ${r.occupancy_pct}%, in use ${r.in_use_pct}%"></rect>`;
+    bars += `<rect x="${x.toFixed(1)}" y="${y(r.occupancy_pct).toFixed(1)}" width="${bw.toFixed(1)}"
+      height="${(ih * r.occupancy_pct / 100).toFixed(1)}" rx="2" fill="var(--seq-450)"
+      data-tip="${esc(r.label)} — occupied ${r.occupancy_pct}%, in use ${r.in_use_pct}%"></rect>`;
+    const day = (r.label || "").split(" ")[0];
+    if (day !== lastDay) {
+      lastDay = day;
+      dayTicks += `<text x="${(pad.l + i * step).toFixed(1)}" y="${H - 7}"
+        font-size="10.5" fill="var(--muted)">${esc(day)}</text>`;
+    }
+  });
+  const grid = [0, 25, 50, 75, 100].map(v =>
+    `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"
+       stroke="var(--grid)" stroke-width="1"></line>
+     <text x="${pad.l - 6}" y="${y(v) + 3.5}" font-size="10.5" text-anchor="end"
+       fill="var(--muted)">${v}</text>`).join("");
+  return `
+    <div class="legend">
+      <span><span class="k" style="background:var(--seq-450)"></span>Occupied (person present)</span>
+      <span><span class="k" style="background:var(--seq-250)"></span>In use (incl. claimed)</span>
+    </div>
+    <div class="chart"><svg viewBox="0 0 ${W} ${H}" class="sweep"
+      role="img" aria-label="Desk occupancy per observation round">
+      ${grid}${bars}${dayTicks}</svg></div>`;
+}
+
+function overlayScatter(points, tipping) {
+  if (!points.length) return '<p class="muted small">Needs survey data joined to teams.</p>';
+  const W = 960, H = 250, pad = {l: 38, r: 12, t: 12, b: 32};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  const xs = points.map(p => p.utilisation_pct);
+  const xmax = Math.max(100, ...xs) * 1.04;
+  const x = v => pad.l + iw * v / xmax;
+  const y = v => pad.t + ih * (1 - (v - 1) / 4);   // scores live on 1–5
+  const grid = [1,2,3,4,5].map(v =>
+    `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"
+       stroke="var(--grid)"></line>
+     <text x="${pad.l - 6}" y="${y(v)+3.5}" font-size="10.5" text-anchor="end"
+       fill="var(--muted)">${v}</text>`).join("");
+  const xt = [0, 25, 50, 75, 100].map(v =>
+    `<text x="${x(v)}" y="${H - 10}" font-size="10.5" text-anchor="middle"
+       fill="var(--muted)">${v}%</text>`).join("");
+  // Selective direct labels: skip any that would collide with one already
+  // placed — the hover tooltip still identifies every point.
+  const placed = [];
+  const all = points.map(p => [x(p.utilisation_pct), y(p.experience_score)]);
+  const dots = points.map((p, i) => {
+    const [px, py] = all[i];
+    const clear =
+      placed.every(q => Math.abs(px - q[0]) > 78 || Math.abs(py - q[1]) > 16) &&
+      all.every((q, j) => j === i ||             // no dot inside the label box
+        q[0] < px + 4 || q[0] > px + 80 || Math.abs(py - q[1]) > 12);
+    if (clear) placed.push([px, py]);
+    return `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}"
+       r="6" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"
+       data-tip="${esc(p.team)} — utilisation ${fmt(p.utilisation_pct)}%, experience ${fmt(p.experience_score,2)}/5 (${p.responses} responses)"></circle>` +
+     (clear ? `<text x="${(px+9).toFixed(1)}" y="${(py+4).toFixed(1)}"
+       font-size="11" fill="var(--ink-2)">${esc(p.team)}</text>` : "");
+  }).join("");
+  let tipline = "";
+  if (tipping && typeof tipping === "object" && tipping.confident) {
+    tipline = `<line x1="${x(tipping.tipping_point_x)}" x2="${x(tipping.tipping_point_x)}"
+        y1="${pad.t}" y2="${pad.t + ih}" stroke="var(--s2)" stroke-width="2"
+        stroke-dasharray="5 4"></line>
+      <text x="${x(tipping.tipping_point_x) + 6}" y="${pad.t + 12}" font-size="11.5"
+        font-weight="600" fill="var(--s2)">tipping point ≈ ${tipping.tipping_point_x}%</text>`;
+  }
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img"
+    aria-label="Experience score against team desk utilisation">
+    ${grid}${xt}${dots}${tipline}</svg></div>`;
+}
+
+const hbar = (label, value, max, color, tipText, suffix="") => `
+  <div class="hbar">
+    <div>${esc(label)}</div>
+    <div class="track"><div class="fill" data-tip="${esc(tipText)}"
+      style="width:${Math.max(1, 100 * value / max).toFixed(1)}%;background:${color}"></div></div>
+    <div class="num">${esc(String(value))}${suffix}</div>
+  </div>`;
+
+/* ---------------- views ---------------- */
+function nav(active) {
+  const home = S.role === "admin"
+    ? `<a href="#/admin" class="${active==="admin"?"on":""}">Organisations</a>`
+    : `<a href="#/portfolio" class="${active==="portfolio"?"on":""}">Portfolio</a>`;
+  $("#nav").innerHTML = S.key
+    ? home + `<a href="#/connect" class="${active==="connect"?"on":""}">API key</a>`
+    : "";
+}
+
+function connectView() {
+  nav("connect");
+  app.innerHTML = `
+    <p class="eyebrow">Connect</p>
+    <h2>Your workspace key</h2>
+    <p class="sub">Paste the API key you were issued. It stays in this browser
+      tab and is sent only with your requests.</p>
+    <div class="card"><form class="row" id="kf">
+      <input type="password" id="key" placeholder="awa_…" size="42"
+        value="${esc(S.key)}" autocomplete="off">
+      <button class="primary">Connect</button>
+      <span class="err" id="kerr"></span>
+    </form></div>`;
+  $("#kf").onsubmit = async e => {
+    e.preventDefault();
+    S.key = $("#key").value.trim();
+    try {
+      const me = await api("/me");
+      S.role = me.role;
+      sessionStorage.setItem("awa_key", S.key);
+      sessionStorage.setItem("awa_role", S.role);
+      const dest = S.role === "admin" ? "#/admin" : "#/portfolio";
+      if (location.hash === dest) route(); else location.hash = dest;
+    } catch (err) { $("#kerr").textContent = "That key was not accepted."; }
+  };
+}
+
+async function adminView() {
+  nav("admin");
+  app.innerHTML = `
+    <p class="eyebrow">Administration</p>
+    <h2>Organisations</h2>
+    <p class="sub">Each organisation connects with its own key and sees only
+      its own data. Turning uploads off makes their access view-only.</p>
+    <div id="orgs" class="muted">Loading…</div>
+    <div id="newkey"></div>
+    <p class="eyebrow">Add an organisation</p>
+    <div class="card"><form class="row" id="of">
+      <input id="oname" placeholder="Organisation name" required>
+      <input id="osector" placeholder="Sector (e.g. finance)" required>
+      <input id="oregion" placeholder="Region (e.g. london)" required>
+      <button class="primary">Create organisation</button>
+      <span class="err" id="oerr"></span>
+    </form></div>
+    <p class="eyebrow">Research corpus</p>
+    <div id="research" class="card muted">Loading…</div>`;
+
+  const showKey = (title, r) => {
+    $("#newkey").innerHTML = `<div class="card" style="border-color:var(--s2)">
+      <h3>${esc(title)}</h3>
+      <p class="sub small">Copy this key now — it is shown only once. Send the
+        console address and the key to the organisation separately.</p>
+      <code style="word-break:break-all">${esc(r.api_key)}</code></div>`;
+  };
+
+  $("#of").onsubmit = async e => {
+    e.preventDefault();
+    try {
+      const r = await api("/admin/clients", {method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: $("#oname").value,
+          sector: $("#osector").value, region: $("#oregion").value})});
+      await loadOrgs();
+      showKey(`Key for ${$("#oname").value}`, r);
+      e.target.reset();
+    } catch (err) { $("#oerr").textContent = err.message; }
+  };
+
+  async function loadOrgs() {
+    const rows = await api("/admin/clients");
+    $("#orgs").innerHTML = rows.length ? `<div class="card"><table>
+      <thead><tr><th>Organisation</th><th>Sector</th><th>Region</th>
+        <th>Buildings</th><th>Studies</th><th>Uploads</th><th></th></tr></thead>
+      <tbody>` + rows.map(r => `<tr>
+        <td>${esc(r.name)}</td><td>${esc(r.sector)}</td><td>${esc(r.region)}</td>
+        <td>${r.buildings}</td><td>${r.studies}</td>
+        <td><label><input type="checkbox" data-org="${r.client_id}"
+          ${r.uploads_enabled ? "checked" : ""}>
+          ${r.uploads_enabled ? "enabled" : "view-only"}</label></td>
+        <td><button class="quiet" data-reissue="${r.client_id}"
+          data-name="${esc(r.name)}">New key</button></td></tr>`).join("") +
+      `</tbody></table></div>`
+      : `<div class="card">No organisations yet — create the first one below.</div>`;
+    document.querySelectorAll("#orgs input[data-org]").forEach(cb => {
+      cb.onchange = async () => {
+        await api(`/admin/clients/${cb.dataset.org}`, {method: "PATCH",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({uploads_enabled: cb.checked})});
+        loadOrgs();
+      };
+    });
+    document.querySelectorAll("#orgs button[data-reissue]").forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm(`Issue a new key for ${btn.dataset.name}? Their current `
+                     + `key stops working immediately.`)) return;
+        const r = await api(`/admin/clients/${btn.dataset.reissue}/reissue-key`,
+                            {method: "POST"});
+        showKey(`New key for ${btn.dataset.name}`, r);
+        loadOrgs();
+      };
+    });
+  }
+
+  try { await loadOrgs(); }
+  catch (err) { $("#orgs").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+
+  try {
+    const r = await api("/admin/research/capacity-experience");
+    const corr = r.correlations || {};
+    const fmtCorr = c => c ? `r = ${c.r} (n=${c.n})` : "not enough data";
+    $("#research").className = "card";
+    $("#research").innerHTML = r.studies
+      ? `<div class="tiles">
+          <div class="tile"><div class="v">${r.studies}</div>
+            <div class="l">Studies in the corpus</div></div>
+          <div class="tile"><div class="v">${
+              typeof r.universal_tipping_point === "object"
+              ? r.universal_tipping_point.tipping_point_x + "%" : "—"}</div>
+            <div class="l">Utilisation tipping point</div>
+            <div class="n">${typeof r.universal_tipping_point === "object"
+              && !r.universal_tipping_point.confident
+              ? "fitted, low confidence" : ""}</div></div>
+        </div>
+        <p class="small">Capacity ratio ↔ experience:
+          ${fmtCorr(corr.capacity_ratio_vs_experience)} ·
+          Utilisation ↔ experience:
+          ${fmtCorr(corr.utilisation_vs_experience)}</p>`
+      : `<p class="muted small">No completed studies in the corpus yet.</p>`;
+  } catch (err) { $("#research").textContent = err.message; }
+}
+
+async function portfolioView() {
+  nav("portfolio");
+  app.innerHTML = `<p class="eyebrow">Portfolio</p><h2>Your buildings</h2>
+    <p class="sub">Latest-study indicators for every building. Add buildings
+      one at a time; each carries its own uploads and studies.</p>
+    <div id="list" class="muted">Loading…</div>
+    <p class="eyebrow">Add a building</p>
+    <div class="card"><form class="row" id="bf">
+      <input id="bname" placeholder="Building name" required>
+      <input id="bregion" placeholder="Region (e.g. london)" required>
+      <input id="barea" type="number" min="1" placeholder="Gross area m²">
+      <button class="primary">Add building</button>
+      <span class="err" id="berr"></span>
+    </form></div>`;
+  $("#bf").onsubmit = async e => {
+    e.preventDefault();
+    try {
+      await api("/buildings", {method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({name: $("#bname").value, region: $("#bregion").value,
+          gross_area_m2: $("#barea").value ? +$("#barea").value : null})});
+      portfolioView();
+    } catch (err) { $("#berr").textContent = err.message; }
+  };
+  try {
+    const rows = await api("/portfolio");
+    $("#list").innerHTML = rows.length ? `<div class="card"><table>
+      <thead><tr><th>Building</th><th>Region</th><th>Size band</th>
+        <th>Avg utilisation</th><th>Peak</th><th>Sharing ratio</th>
+        <th>Experience</th></tr></thead><tbody>` +
+      rows.map(r => `<tr>
+        <td><a href="#/building/${r.building_id}">${esc(r.name)}</a></td>
+        <td>${esc(r.region)}</td><td>${esc(r.size_band)}</td>
+        <td>${r.kpis ? fmt(r.kpis.average_utilisation_pct) + "%" : "—"}</td>
+        <td>${r.kpis ? fmt(r.kpis.peak_occupancy_pct) + "%" : "—"}</td>
+        <td>${r.kpis ? fmt(r.kpis.sharing_ratio, 2) : "—"}</td>
+        <td>${r.kpis && r.kpis.experience_score != null
+              ? fmt(r.kpis.experience_score, 2) + "/5" : "—"}</td></tr>`).join("") +
+      `</tbody></table></div>`
+      : `<div class="card">No buildings yet — add your first one below.</div>`;
+  } catch (err) { $("#list").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+}
+
+function uploadCard(title, hint, handler) {
+  const id = "u" + Math.random().toString(36).slice(2, 8);
+  const html = `<div class="card"><h3>${esc(title)}</h3>
+    <p class="sub small">${hint}</p>
+    <form class="row" id="${id}"><input type="file" accept=".csv,.xlsx" required>
+      <button class="quiet">Upload</button></form>
+    <div class="small" id="${id}r"></div></div>`;
+  queueMicrotask(() => {
+    const f = document.getElementById(id);
+    if (!f) return;
+    f.onsubmit = async e => {
+      e.preventDefault();
+      const out = document.getElementById(id + "r");
+      out.innerHTML = '<span class="muted">Uploading…</span>';
+      try {
+        const rep = await handler(f.querySelector("input").files[0]);
+        out.innerHTML = `<span class="${rep.ok ? "ok-note" : "err"}">
+            ${rep.rows_ingested} rows ingested${rep.ok ? "" : " — errors found"}</span>` +
+          rep.issues.map(i => `<div class="issue"><span class="sev ${i.severity}">
+            ${i.severity}</span> ${esc(i.detail)}</div>`).join("");
+      } catch (err) { out.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+    };
+  });
+  return html;
+}
+
+async function buildingView(id) {
+  nav("portfolio");
+  app.innerHTML = `<div class="muted">Loading…</div>`;
+  let b;
+  try {
+    b = (await api("/buildings")).find(x => x.building_id === id);
+    if (!b) throw new Error("Building not found");
+  } catch (err) { app.innerHTML = `<span class="err">${esc(err.message)}</span>`; return; }
+  const studies = await api(`/buildings/${id}/studies`);
+  app.innerHTML = `
+    <p class="eyebrow"><a href="#/portfolio">Portfolio</a> / Building</p>
+    <h2>${esc(b.name)}</h2>
+    <p class="sub">${esc(b.region)} · ${esc(b.size_band)}${b.gross_area_m2
+      ? " · " + fmt(b.gross_area_m2, 0) + " m²" : ""}</p>
+
+    <p class="eyebrow">Reference data</p>
+    <div class="cards">
+      ${uploadCard("Building map", "Every desk and room: <code>setting_code, type, floor, zone, capacity, team</code>.",
+        f => upload(`/buildings/${id}/settings`, f))}
+      ${uploadCard("Teams", "Desk allocations: <code>team, allocated_desks</code>.",
+        f => upload(`/buildings/${id}/teams`, f))}
+      ${uploadCard("Headcount", "Who is based here: <code>person_ref, team, employment_type</code>. Use pseudonymous refs, not names.",
+        f => upload(`/buildings/${id}/headcount`, f))}
+      ${uploadCard("Space schedule", "Area by function: <code>function, area_m2</code>.",
+        f => upload(`/buildings/${id}/space-schedule`, f))}
+    </div>
+
+    <p class="eyebrow">Studies</p>
+    <div class="card">
+      ${studies.length ? `<table><thead><tr><th>Study</th><th>Period</th>
+        <th>Status</th><th></th></tr></thead><tbody>` +
+        studies.map(s => `<tr><td>${esc(s.study_id)}</td>
+          <td>${esc(s.start_date)} → ${esc(s.end_date)}</td>
+          <td>${esc(s.status)}</td>
+          <td><a href="#/study/${s.study_id}">Open report</a></td></tr>`).join("") +
+        `</tbody></table>` : `<p class="muted small">No studies yet.</p>`}
+      <form class="row" id="sf" style="margin-top:12px">
+        <input type="date" id="sd" required> <span class="muted">to</span>
+        <input type="date" id="ed" required>
+        <button class="primary">New study</button>
+        <span class="err" id="serr"></span>
+      </form>
+    </div>
+
+    <p class="eyebrow">Peer comparison</p>
+    <div class="card">
+      <p class="sub small">Compare this building against anonymised peers.
+        Aggregates only; needs at least 3 other client organisations in the pool.</p>
+      <form class="row" id="benchf">
+        <label><input type="checkbox" name="dim" value="sector" checked> Sector</label>
+        <label><input type="checkbox" name="dim" value="size_band" checked> Size band</label>
+        <label><input type="checkbox" name="dim" value="region"> Region</label>
+        <button class="quiet">Compare</button>
+      </form>
+      <div id="benchout"></div>
+    </div>`;
+  $("#sf").onsubmit = async e => {
+    e.preventDefault();
+    try {
+      await api(`/buildings/${id}/studies`, {method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({start_date: $("#sd").value, end_date: $("#ed").value})});
+      buildingView(id);
+    } catch (err) { $("#serr").textContent = err.message; }
+  };
+  $("#benchf").onsubmit = async e => {
+    e.preventDefault();
+    const dims = [...document.querySelectorAll("#benchf input:checked")]
+      .map(i => i.value).join(",");
+    const out = $("#benchout");
+    out.innerHTML = '<p class="muted small">Comparing…</p>';
+    try {
+      const r = await api(`/buildings/${id}/benchmark?dimensions=${dims}`);
+      if (!r.available) { out.innerHTML = `<p class="sub">${esc(r.reason)}</p>`; return; }
+      const names = {average_utilisation_pct: "Average utilisation %",
+        peak_occupancy_pct: "Peak occupancy %", frequency_pct: "Frequency %",
+        claimed_but_empty_pct: "Claimed-but-empty %", attendance_rate: "Attendance rate",
+        sharing_ratio: "Sharing ratio", area_per_desk_m2: "Area per desk m²",
+        experience_score: "Experience score"};
+      const rows = Object.entries(r.comparison);
+      out.innerHTML = `<p class="small muted">${r.peer_buildings} peer buildings
+          across ${r.peer_clients} organisations · band shows peer p25–p75,
+          tick the median, <span style="color:var(--s2)">●</span> is you</p>` +
+        rows.map(([k, v]) => {
+          const lo = Math.min(v.p25, v.you), hi = Math.max(v.p75, v.you);
+          const span = (hi - lo) || 1, pad2 = span * 0.15;
+          const sc = x => 100 * (x - lo + pad2) / (span + 2 * pad2);
+          return `<div class="strip"><div>${names[k] || esc(k)}</div>
+            <div class="range">
+              <div class="band" style="left:${sc(v.p25)}%;width:${Math.max(1, sc(v.p75)-sc(v.p25))}%"
+                data-tip="Peers: p25 ${v.p25} · median ${v.median} · p75 ${v.p75} (n=${v.n})"></div>
+              <div class="med" style="left:${sc(v.median)}%"></div>
+              <div class="you" style="left:calc(${sc(v.you)}% - 6px)"
+                data-tip="You: ${v.you} — ${esc(v.position)}"></div>
+            </div>
+            <div class="num small">${v.you}</div></div>`;
+        }).join("");
+    } catch (err) { out.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+  };
+}
+
+async function studyView(id) {
+  nav("portfolio");
+  app.innerHTML = `<div class="muted">Loading…</div>`;
+  let rep = null, failureRate = 5;
+  const render = () => {
+    if (!rep) {
+      app.innerHTML = `
+        <p class="eyebrow"><a href="#/portfolio">Portfolio</a> / Study</p>
+        <h2>Study ${esc(id)}</h2>
+        <p class="sub">No observations yet — upload rounds below, then the
+          report appears here.</p>
+        <div class="cards">
+        ${uploadCard("Observation rounds",
+          "<code>setting_code, ts, round, status, team</code> — one row per setting per sweep.",
+          async f => { const r = await upload(`/studies/${id}/observations`, f);
+            load(); return r; })}
+        ${uploadCard("Experience survey",
+          "<code>response_id, team, item, score</code> — scores 1–5.",
+          async f => { const r = await upload(`/studies/${id}/survey`, f);
+            load(); return r; })}
+        </div>`;
+      return;
+    }
+    const d = rep.desks, c = rep.headcount_cascade, s = rep.desk_sizing;
+    const teams = s.per_team || [];
+    const maxDesks = Math.max(1, ...teams.flatMap(t => [t.allocated_desks, t.required_desks]));
+    app.innerHTML = `
+      <p class="eyebrow"><a href="#/portfolio">Portfolio</a> / Study</p>
+      <h2>Utilisation report</h2>
+      <p class="sub">${d.settings} desks observed over ${d.rounds} rounds.
+        Peak round: ${esc(d.peak_round || "—")}.</p>
+
+      <div class="tiles">
+        <div class="tile"><div class="v">${fmt(d.peak_occupancy_pct)}%</div>
+          <div class="l">Peak occupancy</div>
+          <div class="n">space is sized for peaks</div></div>
+        <div class="tile"><div class="v">${fmt(d.average_utilisation_pct)}%</div>
+          <div class="l">Average utilisation</div></div>
+        <div class="tile"><div class="v">${fmt(d.frequency_pct)}%</div>
+          <div class="l">Frequency (any use)</div>
+          <div class="n">${fmt(d.claimed_but_empty_pct)}% claimed but empty</div></div>
+        <div class="tile"><div class="v">${c.sharing_ratio ?? "—"}</div>
+          <div class="l">Sharing ratio</div>
+          <div class="n">${c.assigned_population ?? "—"} people · ${c.desks_provided ?? "—"} desks</div></div>
+        <div class="tile"><div class="v">${c.attendance_rate != null
+            ? fmt(100 * c.attendance_rate) + "%" : "—"}</div>
+          <div class="l">Attendance rate</div>
+          <div class="n">avg daily peak present</div></div>
+      </div>
+
+      <p class="eyebrow">The sweep</p>
+      <div class="card">${sweepStrip(rep.desk_rounds || [])}</div>
+
+      <p class="eyebrow">Desk sizing</p>
+      <div class="card">
+        <div class="dial">
+          <label for="fr">Acceptable failure rate</label>
+          <input type="range" id="fr" min="1" max="20" step="1" value="${failureRate}">
+          <span class="v">${failureRate}%</span>
+          <span class="small muted">→ desks sized at the ${100 - failureRate}th
+            percentile of observed team demand</span>
+        </div>
+        <div class="tiles">
+          <div class="tile"><div class="v">${s.building.required_desks_pooled}</div>
+            <div class="l">Desks required (pooled)</div>
+            <div class="n">sharing across teams saves
+              ${s.building.pooling_saving_desks} desks</div></div>
+          <div class="tile"><div class="v">${s.building.sharing_ratio_pooled ?? "—"}</div>
+            <div class="l">Sharing ratio at this risk</div>
+            <div class="n">${s.building.assigned_headcount} assigned people</div></div>
+        </div>
+        <div class="legend">
+          <span><span class="k" style="background:var(--s1)"></span>Required at ${failureRate}%</span>
+          <span><span class="k" style="background:var(--grid)"></span>Currently allocated</span>
+        </div>
+        ${teams.map(t => `
+          <div class="hbar"><div>${esc(t.team)}</div>
+            <div class="track">
+              <div class="fill" style="width:${100 * t.allocated_desks / maxDesks}%;
+                background:var(--grid);border-radius:0 4px 4px 0"></div>
+              <div class="fill" data-tip="${esc(t.team)}: needs ${t.required_desks} desks at ${failureRate}% failure (has ${t.allocated_desks}); ${t.assigned_headcount} people; ratio ${t.sharing_ratio ?? "—"}"
+                style="width:${100 * t.required_desks / maxDesks}%;background:var(--s1);
+                height:8px;top:3px"></div>
+            </div>
+            <div class="num">${t.required_desks} / ${t.allocated_desks}
+              <span class="${t.delta_vs_allocated > 0 ? "err" : "ok-note"}">
+                (${t.delta_vs_allocated > 0 ? "+" : ""}${t.delta_vs_allocated})</span></div>
+          </div>`).join("")}
+      </div>
+
+      <p class="eyebrow">Headcount cascade</p>
+      <div class="card">
+        ${c.assigned_population ? [
+          hbar("Assigned population", c.assigned_population, c.assigned_population,
+            "var(--seq-650)", "Everyone nominally based in the building"),
+          hbar("Present (daily peak avg)", Math.round(c.avg_daily_peak_present),
+            c.assigned_population, "var(--seq-450)",
+            `Attendance rate ${fmt(100 * c.attendance_rate)}% — the sharing bet lives here`),
+          hbar("At a desk (average)", Math.round(c.avg_desk_demand),
+            c.assigned_population, "var(--seq-250)",
+            `Utilisation factor ${fmt(100 * c.utilisation_factor)}% of those present`),
+        ].join("") + `<p class="small muted" style="margin:8px 0 0">${esc(c.note || "")}</p>`
+        : `<p class="muted small">${esc(c.note || "Needs a headcount upload.")}</p>`}
+      </div>
+
+      <p class="eyebrow">Experience overlay</p>
+      <div class="card">
+        ${overlayScatter(rep.experience_overlay.points || [],
+                         rep.experience_overlay.tipping_point)}
+        <p class="small muted">${
+          typeof rep.experience_overlay.tipping_point === "string"
+            ? esc(rep.experience_overlay.tipping_point)
+            : rep.experience_overlay.tipping_point &&
+              !rep.experience_overlay.tipping_point.confident
+              ? "A breakpoint was fitted but is not statistically convincing — treat with care."
+              : ""}
+          ${rep.experience_overlay.correlation_utilisation_vs_experience != null
+            ? " Correlation utilisation ↔ experience: r = " +
+              rep.experience_overlay.correlation_utilisation_vs_experience : ""}</p>
+      </div>
+
+      <p class="eyebrow">Meeting rooms — separate module</p>
+      <div class="card">
+        ${rep.meeting_rooms.rooms ? `<div class="tiles">
+          <div class="tile"><div class="v">${fmt(rep.meeting_rooms.average_utilisation_pct)}%</div>
+            <div class="l">Average utilisation</div>
+            <div class="n">${rep.meeting_rooms.rooms} rooms</div></div>
+          <div class="tile"><div class="v">${fmt(rep.meeting_rooms.peak_occupancy_pct)}%</div>
+            <div class="l">Peak occupancy</div></div>
+          <div class="tile"><div class="v">${fmt(rep.meeting_rooms.no_show_proxy_pct)}%</div>
+            <div class="l">No-show proxy</div>
+            <div class="n">claimed but nobody there</div></div>
+        </div>` : `<p class="muted small">No meeting rooms observed.</p>`}
+      </div>
+
+      <p class="eyebrow">More data</p>
+      <div class="cards">
+        ${uploadCard("Observation rounds", "Add further sweeps — re-uploading a round replaces it.",
+          async f => { const r = await upload(`/studies/${id}/observations`, f); load(); return r; })}
+        ${uploadCard("Experience survey", "<code>response_id, team, item, score</code> — scores 1–5.",
+          async f => { const r = await upload(`/studies/${id}/survey`, f); load(); return r; })}
+      </div>`;
+    const dial = $("#fr");
+    if (dial) dial.oninput = async () => {
+      failureRate = +dial.value;
+      rep.desk_sizing = await api(`/studies/${id}/sizing?failure_rate=${failureRate}`);
+      render();
+    };
+  };
+  const load = async () => {
+    try { rep = await api(`/studies/${id}/report?failure_rate=${failureRate}`); }
+    catch (err) { rep = null; }
+    render();
+  };
+  await load();
+}
+
+/* ---------------- router ---------------- */
+function route() {
+  const fallback = S.role === "admin" ? "#/admin" : "#/portfolio";
+  const h = location.hash || fallback;
+  if (!S.key && h !== "#/connect") { location.hash = "#/connect"; return; }
+  const m = h.match(/^#\/(\w+)(?:\/(.+))?/) || [];
+  ({connect: connectView, portfolio: portfolioView, admin: adminView,
+    building: () => buildingView(m[2]), study: () => studyView(m[2])}[m[1]]
+    || (S.role === "admin" ? adminView : portfolioView))();
+}
+addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

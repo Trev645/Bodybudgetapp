@@ -1,0 +1,9 @@
+.git
+.github
+.claude
+.pytest_cache
+__pycache__
+*.pyc
+*.db
+tests/
+*.egg-info
